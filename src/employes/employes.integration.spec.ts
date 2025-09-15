@@ -17,11 +17,16 @@ describe('EmployesService Integration', () => {
     module = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
-          type: 'sqlite',
-          database: ':memory:',
+          type: 'postgres',
+          host: process.env.DATABASE_HOST || 'localhost',
+          port: parseInt(process.env.DATABASE_PORT) || 5432,
+          username: process.env.DATABASE_USERNAME || 'postgres',
+          password: process.env.DATABASE_PASSWORD || 'postgres',
+          database: process.env.DATABASE_NAME || 'test_db',
           entities: [Factory, Employe],
           synchronize: true,
           logging: false,
+          dropSchema: true, // Clean database for each test run
         }),
         TypeOrmModule.forFeature([Employe, Factory]),
       ],
@@ -31,10 +36,12 @@ describe('EmployesService Integration', () => {
     service = module.get<EmployesService>(EmployesService);
     employeeRepository = module.get<Repository<Employe>>(getRepositoryToken(Employe));
     factoryRepository = module.get<Repository<Factory>>(getRepositoryToken(Factory));
-  });
+  }, 30000);
 
   afterAll(async () => {
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   beforeEach(async () => {

@@ -1,10 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import * as request from 'supertest';
-import { AppModule } from './../src/app.module';
 import { Factory } from '../src/factory/entities/factory.entity';
 import { Employe } from '../src/employes/entities/employe.entity';
+import { FactoryModule } from '../src/factory/factory.module';
+import { EmployesModule } from '../src/employes/employes.module';
+import { AppController } from '../src/app.controller';
+import { AppService } from '../src/app.service';
 
 describe('Factory and Employee (e2e)', () => {
   let app: INestApplication;
@@ -13,36 +17,30 @@ describe('Factory and Employee (e2e)', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        ConfigModule.forRoot(),
         TypeOrmModule.forRoot({
-          type: 'sqlite',
-          database: ':memory:',
+          type: 'postgres',
+          host: process.env.DATABASE_HOST || 'localhost',
+          port: parseInt(process.env.DATABASE_PORT) || 5432,
+          username: process.env.DATABASE_USERNAME || 'postgres',
+          password: process.env.DATABASE_PASSWORD || 'postgres',
+          database: process.env.DATABASE_NAME || 'test_db',
           entities: [Factory, Employe],
           synchronize: true,
           logging: false,
+          dropSchema: true,
         }),
-        AppModule,
+        FactoryModule,
+        EmployesModule,
       ],
-    })
-      .overrideModule(AppModule)
-      .useModule(
-        Test.createTestingModule({
-          imports: [
-            TypeOrmModule.forRoot({
-              type: 'sqlite',
-              database: ':memory:',
-              entities: [Factory, Employe],
-              synchronize: true,
-              logging: false,
-            }),
-          ],
-        }).compile(),
-      )
-      .compile();
+      controllers: [AppController],
+      providers: [AppService],
+    }).compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
-  });
+  }, 30000);
 
   afterAll(async () => {
     await app.close();
