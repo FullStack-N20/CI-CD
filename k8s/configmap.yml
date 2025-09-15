@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: factory-employee-app
+data:
+  NODE_ENV: "production"
+  DATABASE_TYPE: "postgres"
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "factory_employee_db"
+  LOG_LEVEL: "info"

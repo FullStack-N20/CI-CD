@@ -1,0 +1,78 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: staging_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/staging_db
+
+    - name: Build application
+      run: npm run build
+
+    - name: Build Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:staging .
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Push staging image
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:staging
+
+    # Example staging deployment (customize based on your infrastructure)
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        echo "Image: ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:staging"
+        # Add your staging deployment commands here
+        # Examples:
+        # - Update ECS service
+        # - Deploy to staging K8s cluster
+        # - Update staging docker-compose
+
+    - name: Run staging smoke tests
+      run: |
+        echo "Running smoke tests against staging..."
+        # Add smoke tests here
+        # curl -f https://staging.your-domain.com/health

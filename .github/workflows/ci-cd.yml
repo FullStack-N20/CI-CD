@@ -1,0 +1,144 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linter
+      run: npm run lint
+
+    - name: Run unit tests
+      run: npm test
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+    - name: Run unit tests with coverage
+      run: npm run test:cov
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+    - name: Run e2e tests
+      run: npm run test:e2e
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build application
+      run: npm run build
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:latest
+          ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deployment step - configure based on your deployment target"
+        echo "Examples:"
+        echo "- Deploy to AWS ECS"
+        echo "- Deploy to Azure Container Instances"
+        echo "- Deploy to Google Cloud Run"
+        echo "- Deploy to your VPS/server"
+        
+    # Example deployment to a VPS via SSH
+    # - name: Deploy to VPS
+    #   uses: appleboy/ssh-action@v1.0.0
+    #   with:
+    #     host: ${{ secrets.HOST }}
+    #     username: ${{ secrets.USERNAME }}
+    #     key: ${{ secrets.SSH_KEY }}
+    #     script: |
+    #       docker pull ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:latest
+    #       docker stop factory-api || true
+    #       docker rm factory-api || true
+    #       docker run -d --name factory-api -p 3000:3000 \
+    #         -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
+    #         -e NODE_ENV=production \
+    #         ${{ secrets.DOCKER_USERNAME }}/factory-employee-api:latest
